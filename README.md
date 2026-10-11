@@ -73,3 +73,16 @@ Native acceptance additionally covers exit replay/conflict, rollback after write
 two competing exits, expiry midnight, stock filters and movement pagination.
 The tests use restricted inventory_app and TransactionTemplate, not HTTP wiring.
 No relay or consumer is introduced by these storage adapters.
+
+## HTTP Controllers
+
+Controllers publish entries, activate/cancel actions, exits, stock, movements and
+health routes. New writes return 201 and a Location; replays return 200. Failures
+use the correlated error envelope and do not expose database exception details.
+Transition bodies must be absent or empty objects. Health checks owned tables.
+Write methods declare ADMIN/INVENTORY; history declares ADMIN/INVENTORY/SUPERVISOR;
+stock additionally declares CONSULTATION. Actual enforcement needs the application
+security configuration, which is published next along with strict JSON and filters.
+Standalone MockMvc tests use synthetic principals and mocked ports, not JWT
+signature validation, request filtering or role enforcement. No runnable application
+or deployment is introduced in this controller publication.
