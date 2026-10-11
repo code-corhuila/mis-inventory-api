@@ -20,3 +20,9 @@ jobs:
           cache: maven
       - name: Verify published modules
         run: mvn -B verify
+      - name: Parse persistence acceptance script
+        shell: pwsh
+        run: |
+          $tokens=$null; $errors=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/tests/Test-Persistence.ps1",[ref]$tokens,[ref]$errors)
+          if($errors.Count) { throw ($errors -join "`n") }
