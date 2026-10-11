@@ -40,3 +40,24 @@ This first publication intentionally registers only the core Maven module.
 Persistence adapters, authentication, HTTP endpoints and runnable deployment
 are published next; this commit alone is not a running inventory service.
 No database credentials, application keys or environment files are included.
+
+## Entry Persistence
+
+`inventory-adapters` now includes JDBC preparation, activation and cancellation.
+Request snapshots and stock changes share the transaction; activation inserts a
+movement whose database trigger emits the outbox event. Active stock cannot be
+cancelled. Cross-domain references are checked through HTTP, never shared SQL.
+Read queries, exits and the runnable HTTP application are not published yet.
+
+```powershell
+./tests/Test-Persistence.ps1 -InfraRoot 'D:\descargas\pago 2\mis-infra-postgres' -InventoryDbRoot 'D:\descargas\pago 2\Julian-Alberto-Trujillo-Bonilla-\tmp\repos-oficiales\mis-inventory-db'
+```
+
+Requires PowerShell 7, Docker Compose include and infrastructure's ignored dev.env.
+The script migrates a random isolated PostgreSQL project and tests JDBC as
+inventory_app. It removes only its own containers and database volume.
+Database tests use real transactions with TransactionTemplate and stub reference
+validation; they also cover two concurrent activations of one entry and rollback
+after all activation writes, but do not verify Spring HTTP wiring or real
+Catalog/Suppliers authentication. Separate HTTP-stub tests cover reference responses.
+Ordinary Maven/CI runs skip the seven database tests when INV_DB_URL is absent.

@@ -1,0 +1,18 @@
+include:
+  - ${MIS_INVENTORY_DB_PATH:?MIS_INVENTORY_DB_PATH required}/deploy/compose.test.yml
+services:
+  inventory-tests:
+    image: maven:3.9.9-eclipse-temurin-17
+    working_dir: /build
+    environment:
+      INV_DB_URL: jdbc:postgresql://postgres:5432/${PG_DATABASE:?PG_DATABASE required}
+      INV_DB_PASSWORD: ${INVENTORY_APP_PASSWORD:?INVENTORY_APP_PASSWORD required}
+    volumes:
+      - ..:/build
+      - maven-cache:/root/.m2
+    command: [mvn, -B, verify]
+    networks: [platform]
+volumes:
+  maven-cache:
+    external: true
+    name: mis-publication-maven-cache
