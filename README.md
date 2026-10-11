@@ -36,9 +36,9 @@ Unit tests cover input boundaries and calendar rules, not database concurrency.
 mvn -B verify
 ```
 
-This first publication intentionally registers only the core Maven module.
-Persistence adapters, authentication, HTTP endpoints and runnable deployment
-are published next; this commit alone is not a running inventory service.
+The first publication registered only the core Maven module; the subsequent
+publications add persistence adapters. Authentication, HTTP endpoints and runnable
+deployment follow next; these modules alone are not a running inventory service.
 No database credentials, application keys or environment files are included.
 
 ## Entry Persistence
@@ -47,7 +47,7 @@ No database credentials, application keys or environment files are included.
 Request snapshots and stock changes share the transaction; activation inserts a
 movement whose database trigger emits the outbox event. Active stock cannot be
 cancelled. Cross-domain references are checked through HTTP, never shared SQL.
-Read queries, exits and the runnable HTTP application are not published yet.
+The runnable HTTP application is not published yet.
 
 ```powershell
 ./tests/Test-Persistence.ps1 -InfraRoot 'D:\descargas\pago 2\mis-infra-postgres' -InventoryDbRoot 'D:\descargas\pago 2\Julian-Alberto-Trujillo-Bonilla-\tmp\repos-oficiales\mis-inventory-db'
@@ -60,4 +60,16 @@ Database tests use real transactions with TransactionTemplate and stub reference
 validation; they also cover two concurrent activations of one entry and rollback
 after all activation writes, but do not verify Spring HTTP wiring or real
 Catalog/Suppliers authentication. Separate HTTP-stub tests cover reference responses.
-Ordinary Maven/CI runs skip the seven database tests when INV_DB_URL is absent.
+Ordinary Maven/CI runs skip the database tests when INV_DB_URL is absent.
+
+## Stock Queries And Exits
+
+JDBC stock queries separate pending, on-hand and available quantities; expired
+lots retain on-hand history but expose zero available stock. Read pagination uses
+repeatable-read transactions and movements filter dates in America/Bogota.
+Exits lock their lot, reject expired/insufficient stock, and persist the discount,
+audit, movement, outbox event and idempotency snapshot in one transaction.
+Native acceptance additionally covers exit replay/conflict, rollback after writes,
+two competing exits, expiry midnight, stock filters and movement pagination.
+The tests use restricted inventory_app and TransactionTemplate, not HTTP wiring.
+No relay or consumer is introduced by these storage adapters.
