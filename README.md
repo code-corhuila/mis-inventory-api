@@ -23,3 +23,20 @@ branch into another: `merge develop -> qa` and `merge qa -> main` do not exist i
 rule.
 
 Full policy: `00-governance/branching-policy.md` in `mis-docs`.
+
+## Inventory Core Publication
+
+`inventory-core` is framework-independent Java 17. It defines entry/exit requests,
+read/write ports, stock and movement DTOs, bounded pagination and filters.
+Lot numbers are normalized; identifiers, request keys and correlation IDs are
+validated. Entry freshness uses the civil date in America/Bogota.
+Unit tests cover input boundaries and calendar rules, not database concurrency.
+
+```sh
+mvn -B verify
+```
+
+This first publication intentionally registers only the core Maven module.
+Persistence adapters, authentication, HTTP endpoints and runnable deployment
+are published next; this commit alone is not a running inventory service.
+No database credentials, application keys or environment files are included.
