@@ -7,6 +7,8 @@ El publicador HTTP con credencial propia esta implementado por separado en
 docs/ADR-EVT-006-signed-relay-http.md; falta conectarlo al login y despliegue exclusivos.
 El modo de proceso separado se documenta en docs/ADR-EVT-007-exclusive-relay-runtime.md.
 Esta desactivado por defecto; todavia no hay un relay desplegado en dev.
+La composicion separada y aceptacion desechable del circuito firmado estan en
+docs/ADR-EVT-008-isolated-pipeline-acceptance.md. No cambian el entorno activo.
 
 El contrato productor de eventos vive en `docs/stock-changed.schema.json`.
 ADR-EVT-001 documenta el outbox existente; ADR-EVT-002 define la frontera prevista

@@ -1,5 +1,6 @@
 services:
   inventory:
+    image: ${INVENTORY_IMAGE:-mis-inventory:local}
     build:
       context: ..
       dockerfile: deploy/Dockerfile

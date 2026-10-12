@@ -1,0 +1,24 @@
+include:
+  - ${MIS_INVENTORY_DB_PATH:?MIS_INVENTORY_DB_PATH required}/deploy/compose.test.yml
+  - ../deploy/compose.yml
+  - ../deploy/compose.relay.yml
+  - ${MIS_WORKER_PATH:?MIS_WORKER_PATH required}/deploy/compose.yml
+x-dependency: &dependency
+  image: ${WORKER_IMAGE:?WORKER_IMAGE required}
+  entrypoint: [python, /checks/event_dependency.py]
+  volumes:
+    - ./event_dependency.py:/checks/event_dependency.py:ro
+    - ${EVT_PUBLIC_PATH:?EVT_PUBLIC_PATH required}:/keys:ro
+  networks: [platform]
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2)"]
+    interval: 2s
+    timeout: 3s
+    retries: 15
+services:
+  security: *dependency
+  catalog: *dependency
+  suppliers: *dependency
+  ack-proxy:
+    <<: *dependency
+    entrypoint: [python, /checks/event_dependency.py, proxy]
