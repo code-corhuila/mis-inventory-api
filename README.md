@@ -1,5 +1,9 @@
 # mis-inventory-api
 
+El contrato productor de eventos vive en `docs/stock-changed.schema.json`.
+ADR-EVT-001 documenta el outbox existente; ADR-EVT-002 define la frontera prevista
+del relay y consumidor. Contrato publicado no significa entrega implementada.
+
 > inventory bounded context: service API
 
 Part of the **Medicine Inventory System** distributed system — team `medicine-inventory-system`, Grupo 1.
