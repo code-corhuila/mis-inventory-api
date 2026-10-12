@@ -2,7 +2,9 @@
 
 El nucleo de relay reserva eventos con lease y confirmacion protegida por token;
 ver docs/ADR-EVT-005-fenced-outbox-relay.md. No se activa automaticamente ni
-realiza HTTP todavia. Las pruebas JDBC usan PostgreSQL desechable, no el entorno dev.
+se despliega todavia. Las pruebas JDBC usan PostgreSQL desechable, no el entorno dev.
+El publicador HTTP con credencial propia esta implementado por separado en
+docs/ADR-EVT-006-signed-relay-http.md; falta conectarlo al login y despliegue exclusivos.
 
 El contrato productor de eventos vive en `docs/stock-changed.schema.json`.
 ADR-EVT-001 documenta el outbox existente; ADR-EVT-002 define la frontera prevista
