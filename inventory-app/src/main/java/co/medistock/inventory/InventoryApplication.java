@@ -7,6 +7,9 @@ import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
 public class InventoryApplication {
-    public static void main(String[] args) { SpringApplication.run(InventoryApplication.class, args); }
+    public static void main(String[] args) {
+        if(RelaySettings.enabled(System.getenv())) RelayRuntime.run(RelaySettings.from(System.getenv()));
+        else SpringApplication.run(InventoryApplication.class, args);
+    }
     @Bean Clock clock() { return Clock.systemUTC(); }
 }

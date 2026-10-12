@@ -69,6 +69,10 @@ public final class HttpEventPublisher implements EventRelay.Publisher {
         try { var id=UUID.fromString(text); return id.toString().equals(text) && !id.equals(new UUID(0,0)); }
         catch(IllegalArgumentException invalid) { return false; }
     }
+    public void validateCredential() {
+        try { credential(); }
+        catch(Exception invalid) { throw new IllegalStateException("Relay credential unavailable or invalid"); }
+    }
     @Override public EventRelay.Acknowledgement publish(StockEvent event) {
         CompletableFuture<HttpResponse<byte[]>> response=null;
         var body=new LimitedBody();
