@@ -96,7 +96,7 @@ the application connects only as inventory_app. `/health` remains public.
 JSON rejects unknown fields and scalar coercion; POST bodies are limited to 64 KiB.
 Tests use ephemeral RSA keys, method-security proxies with synthetic authentication,
 and servlet mocks. They do not prove the live JWKS/filter/upstream integration.
-Container deployment and real HTTP acceptance follow separately.
+Container deployment and real HTTP acceptance are described below.
 
 ## Container And Contract
 
@@ -104,4 +104,24 @@ Container deployment and real HTTP acceptance follow separately.
 `deploy/compose.yml` joins the shared platform without publishing host ports.
 OpenAPI 3.1 is validated in CI. `tests/Test-Access.ps1` takes BaseUrl, SecurityUrl
 and the ignored SecurityEnv path; it checks real login/JWKS, correlation and roles
-without creating data. Full write/replay integration acceptance follows separately.
+without creating data. Full write/replay integration acceptance is described below.
+
+## Real Write Acceptance
+
+Build the schema validator: `docker build -t mis-inventory-contracts -f tests/Dockerfile.contracts .`.
+Run `tests/Test-Integration.ps1` with BaseUrl (Inventory), GatewayUrl and SecurityEnv.
+It creates a unique active medication/supplier, one lot, an activated entry, a
+cancelled entry and one two-unit exit. Fixtures remain as audit evidence: no deletion
+or mutation of existing records. The final balance is eight with two movements.
+The script checks real JWT/roles, HTTP reference lookups, strict JSON, conflict and
+snapshot replays, cancellation, insufficient stock and schemas of actual responses.
+It does not cover concurrent HTTP writes, live expiry changes, restart recovery,
+every failure path or the saga; JDBC race/rollback tests remain separate.
+CI validates syntax/schema/unit tests; multi-service acceptance is a separate run.
+
+`tests/Test-Publication.ps1` builds the images, starts an additional UID-10001
+Inventory container on a random loopback port, runs access/write acceptance and
+removes only that container. Supply InfraEnv, SecurityEnv, GatewayUrl and DockerNetwork.
+The supplied network must provide postgres/security/catalog/suppliers aliases with
+Inventory migrations already applied. Existing domain data is not erased; new audit
+fixtures are retained. No secret values are passed as command-line literals.
