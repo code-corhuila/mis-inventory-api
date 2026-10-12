@@ -37,8 +37,8 @@ mvn -B verify
 ```
 
 The first publication registered only the core Maven module; the subsequent
-publications add persistence adapters. Authentication, HTTP endpoints and runnable
-deployment follow next; these modules alone are not a running inventory service.
+publications add persistence adapters and the HTTP application. Container deployment
+and real integration acceptance follow separately.
 No database credentials, application keys or environment files are included.
 
 ## Entry Persistence
@@ -47,7 +47,7 @@ No database credentials, application keys or environment files are included.
 Request snapshots and stock changes share the transaction; activation inserts a
 movement whose database trigger emits the outbox event. Active stock cannot be
 cancelled. Cross-domain references are checked through HTTP, never shared SQL.
-The runnable HTTP application is not published yet.
+The HTTP application is now published; container deployment follows separately.
 
 ```powershell
 ./tests/Test-Persistence.ps1 -InfraRoot 'D:\descargas\pago 2\mis-infra-postgres' -InventoryDbRoot 'D:\descargas\pago 2\Julian-Alberto-Trujillo-Bonilla-\tmp\repos-oficiales\mis-inventory-db'
@@ -81,8 +81,19 @@ health routes. New writes return 201 and a Location; replays return 200. Failure
 use the correlated error envelope and do not expose database exception details.
 Transition bodies must be absent or empty objects. Health checks owned tables.
 Write methods declare ADMIN/INVENTORY; history declares ADMIN/INVENTORY/SUPERVISOR;
-stock additionally declares CONSULTATION. Actual enforcement needs the application
-security configuration, which is published next along with strict JSON and filters.
+stock additionally declares CONSULTATION. Application security now enforces these
+annotations, alongside strict JSON and correlation/request-size filters.
 Standalone MockMvc tests use synthetic principals and mocked ports, not JWT
 signature validation, request filtering or role enforcement. No runnable application
 or deployment is introduced in this controller publication.
+
+## Application Security
+
+`inventory-app` now starts the Spring server with stateless RS256 bearer validation,
+issuer/audience/subject/expiry/role checks, method security and correlated 401/403.
+Required environment variables supply the database password, JWKS and reference URLs;
+the application connects only as inventory_app. `/health` remains public.
+JSON rejects unknown fields and scalar coercion; POST bodies are limited to 64 KiB.
+Tests use ephemeral RSA keys, method-security proxies with synthetic authentication,
+and servlet mocks. They do not prove the live JWKS/filter/upstream integration.
+Container deployment and real HTTP acceptance follow separately.
