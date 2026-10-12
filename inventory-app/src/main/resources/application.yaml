@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: mis-inventory
+  datasource:
+    url: ${INVENTORY_DB_URL}
+    username: inventory_app
+    password: ${INVENTORY_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 2000
+      initialization-fail-timeout: 10000
+      data-source-properties:
+        socketTimeout: 5
+        options: -c statement_timeout=5000 -c lock_timeout=4000
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+inventory:
+  jwks-url: ${INVENTORY_JWKS_URL}
+  catalog-url: ${INVENTORY_CATALOG_URL}
+  suppliers-url: ${INVENTORY_SUPPLIERS_URL}
+server:
+  port: 8080
+  shutdown: graceful
+  tomcat:
+    connection-timeout: 5s
+    keep-alive-timeout: 30s
+logging:
+  structured:
+    format:
+      console: ecs
