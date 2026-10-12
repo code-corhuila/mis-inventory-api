@@ -15,13 +15,14 @@ public class JdbcExpiryAlerts implements ExpiryAlerts {
     public JdbcExpiryAlerts(JdbcTemplate jdbc,Clock clock) { this.jdbc=jdbc; this.clock=clock; }
     private record Lot(LocalDate expires,long onHand) { }
     private List<Alert> alerts(UUID lotId) {
-        return jdbc.query("SELECT * FROM inventory.expiry_alert WHERE lot_id=? FOR UPDATE",(r,n) -> {
-            Timestamp resolved=r.getTimestamp("resolved_at");
-            return new Alert(r.getObject("id",UUID.class),lotId,r.getString("severity"),r.getString("state"),
-                r.getObject("expires_on",LocalDate.class),r.getLong("on_hand_quantity"),r.getObject("evaluated_on",LocalDate.class),
-                r.getInt("window_days"),r.getObject("evaluated_by",UUID.class),r.getTimestamp("first_detected_at").toInstant(),
-                r.getTimestamp("last_evaluated_at").toInstant(),resolved==null?null:resolved.toInstant());
-        },lotId);
+        return jdbc.query("SELECT * FROM inventory.expiry_alert WHERE lot_id=? FOR UPDATE",(r,n) -> map(r),lotId);
+    }
+    static Alert map(ResultSet r) throws SQLException {
+        Timestamp resolved=r.getTimestamp("resolved_at");
+        return new Alert(r.getObject("id",UUID.class),r.getObject("lot_id",UUID.class),r.getString("severity"),r.getString("state"),
+            r.getObject("expires_on",LocalDate.class),r.getLong("on_hand_quantity"),r.getObject("evaluated_on",LocalDate.class),
+            r.getInt("window_days"),r.getObject("evaluated_by",UUID.class),r.getTimestamp("first_detected_at").toInstant(),
+            r.getTimestamp("last_evaluated_at").toInstant(),resolved==null?null:resolved.toInstant());
     }
     @Override @Transactional
     public Optional<Alert> evaluate(UUID actor,UUID lotId,int windowDays) {

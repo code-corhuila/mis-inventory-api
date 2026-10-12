@@ -158,6 +158,9 @@ Requires the seventh Inventory DB changeset; no live migration is performed here
 See [decision](docs/ADR-WRK-002-owner-expiry-evaluation.md) and
 [native acceptance](docs/WRK-001-evaluation-acceptance.md).
 
-This is an internal application port, not a new HTTP endpoint. Machine authorization,
-worker triggering/scheduling, public alert reads, frontend integration and QA remain
+The owner port is now exposed through a worker-only evaluation endpoint and a
+human read endpoint. See [HTTP boundary](docs/ADR-WRK-003-expiry-http.md).
+Requires all seven DB changesets: health now checks nine owned tables, including
+expiry_alert. Do not deploy this API against the earlier four-changeset dev schema.
+Gateway routing, worker triggering/scheduling, frontend integration and QA remain
 pending. HU-WRK-001 is not closed and the low-stock flag is unchanged.

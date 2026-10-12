@@ -16,13 +16,15 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class RolePermissionsTest {
-    @Configuration @EnableMethodSecurity @Import({EntryApi.class,ExitApi.class,InventoryReadApi.class,StockEventApi.class})
+    @Configuration @EnableMethodSecurity @Import({EntryApi.class,ExitApi.class,InventoryReadApi.class,StockEventApi.class,ExpiryAlertApi.class})
     static class Config {
         @Bean Entries entries() { return mock(Entries.class); }
         @Bean Exits exits() { return mock(Exits.class); }
         @Bean InventoryRead read() { return mock(InventoryRead.class); }
         @Bean JdbcTemplate jdbc() { return mock(JdbcTemplate.class); }
         @Bean StockEvents stockEvents() { return mock(StockEvents.class); }
+        @Bean ExpiryAlerts expiryAlerts() { return mock(ExpiryAlerts.class); }
+        @Bean ExpiryAlertRead expiryRead() { return mock(ExpiryAlertRead.class); }
     }
     @Test void methodSecurityEnforcesRoleMatrix() {
         UUID actor=UUID.randomUUID(),id=UUID.randomUUID();
@@ -46,6 +48,25 @@ class RolePermissionsTest {
                     assertDoesNotThrow(() -> entry.transition(jwt,id.toString(),"activate","role-key",null,request));
                 else assertThrows(AccessDeniedException.class,() -> entry.transition(jwt,id.toString(),"activate","role-key",null,request));
             }
+        } finally { SecurityContextHolder.clearContext(); }
+    }
+    @Test void expiryPermissionsSeparateHumansFromWorker() {
+        try(var context=new AnnotationConfigApplicationContext(Config.class)) {
+            var endpoint=context.getBean(ExpiryAlertApi.class);
+            var body=Map.<String,Object>of("lotId",UUID.randomUUID().toString(),"windowDays",30);
+            when(context.getBean(ExpiryAlerts.class).evaluate(any(),any(),eq(30))).thenReturn(Optional.empty());
+            for(String service:List.of("human","mis-worker","mis-workflow","mis-inventory-relay"))
+                for(String role:List.of("ADMIN","INVENTORY","SUPERVISOR","CONSULTATION")) {
+                    var builder=Jwt.withTokenValue("synthetic").header("alg","RS256").subject(UUID.randomUUID().toString());
+                    if(!service.equals("human")) builder.claim("service",service);
+                    var jwt=builder.build();
+                    SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                        jwt,List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_"+role))));
+                    if(service.equals("human") && !role.equals("CONSULTATION")) assertDoesNotThrow(() -> endpoint.list(new LinkedMultiValueMap<>()));
+                    else assertThrows(AccessDeniedException.class,() -> endpoint.list(new LinkedMultiValueMap<>()));
+                    if(service.equals("mis-worker") && role.equals("INVENTORY")) assertDoesNotThrow(() -> endpoint.evaluate(jwt,body));
+                    else assertThrows(AccessDeniedException.class,() -> endpoint.evaluate(jwt,body));
+                }
         } finally { SecurityContextHolder.clearContext(); }
     }
     @Test void eventEndpointRequiresSignedWorkerServiceClaimAndInventoryRole() {

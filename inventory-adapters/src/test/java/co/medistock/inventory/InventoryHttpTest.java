@@ -23,6 +23,8 @@ class InventoryHttpTest {
     Exits exits=mock(Exits.class);
     InventoryRead read=mock(InventoryRead.class);
     StockEvents stockEvents=mock(StockEvents.class);
+    ExpiryAlerts alerts=mock(ExpiryAlerts.class);
+    ExpiryAlertRead alertRead=mock(ExpiryAlertRead.class);
     JdbcTemplate jdbc=mock(JdbcTemplate.class);
     UUID actor=UUID.randomUUID(),id=UUID.randomUUID(),lot=UUID.randomUUID(),med=UUID.randomUUID(),supplier=UUID.randomUUID();
     Entry entry=new Entry(id,lot,med,supplier,"LOT-1",LocalDate.of(2099,1,1),10,"PENDING",actor,Instant.parse("2026-10-11T12:00:00Z"));
@@ -34,7 +36,7 @@ class InventoryHttpTest {
     @BeforeEach void setup() {
         // Principal sintetico y puertos mock: no valida firmas, filtros ni autorizacion.
         var jwt=Jwt.withTokenValue("synthetic").header("alg","RS256").subject(actor.toString()).build();
-        http=MockMvcBuilders.standaloneSetup(new EntryApi(entries,jdbc),new ExitApi(exits),new InventoryReadApi(read),new StockEventApi(stockEvents))
+        http=MockMvcBuilders.standaloneSetup(new EntryApi(entries,jdbc),new ExitApi(exits),new InventoryReadApi(read),new StockEventApi(stockEvents),new ExpiryAlertApi(alerts,alertRead))
             .setControllerAdvice(new Errors()).setCustomArgumentResolvers(new HandlerMethodArgumentResolver() {
                 public boolean supportsParameter(MethodParameter p) { return p.getParameterType()==Jwt.class; }
                 public Object resolveArgument(MethodParameter p,ModelAndViewContainer c,NativeWebRequest w,WebDataBinderFactory b) { return jwt; }
@@ -109,8 +111,37 @@ class InventoryHttpTest {
     }
     @Test void healthChecksEveryOwnedPersistenceTable() throws Exception {
         http.perform(get("/health")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
-        verify(jdbc,times(8)).queryForObject(anyString(),eq(Long.class));
+        verify(jdbc,times(9)).queryForObject(anyString(),eq(Long.class));
         verifyNoInteractions(entries,exits,read);
+    }
+    @Test void expiryEvaluationAndReadExposeOwnerResults() throws Exception {
+        when(alerts.evaluate(actor,lot,30)).thenReturn(Optional.empty());
+        http.perform(post("/api/v1/internal/alerts/expiry/evaluate").contentType("application/json")
+            .content("{\"lotId\":\""+lot+"\",\"windowDays\":30}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.lotId").value(lot.toString()))
+            .andExpect(jsonPath("$.alertPresent").value(false)).andExpect(jsonPath("$.alert").value(org.hamcrest.Matchers.nullValue()));
+        var query=new ExpiryQuery(2,1,lot,"RESOLVED","EXPIRED");
+        when(alertRead.list(query)).thenReturn(new InventoryRead.Page<>(List.of(),new InventoryRead.Meta(2,1,1)));
+        http.perform(get("/api/v1/alerts/expiry").param("page","2").param("limit","1").param("lotId",lot.toString())
+            .param("state","RESOLVED").param("severity","EXPIRED"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.meta.total").value(1)).andExpect(jsonPath("$.data").isEmpty());
+        verify(alerts).evaluate(actor,lot,30); verify(alertRead).list(query);
+    }
+    @Test void expiryRejectsClientBalancesDatesAndNonIntegerWindows() throws Exception {
+        for(String value:List.of("0","366","\"30\"","30.5","true","null"))
+            http.perform(post("/api/v1/internal/alerts/expiry/evaluate").contentType("application/json")
+                .content("{\"lotId\":\""+lot+"\",\"windowDays\":"+value+"}")).andExpect(status().isBadRequest());
+        for(String body:List.of("{}","{\"lotId\":\"bad\",\"windowDays\":30}",
+            "{\"lotId\":\""+lot+"\",\"windowDays\":30,\"onHandQuantity\":10}",
+            "{\"lotId\":\""+lot+"\",\"windowDays\":30,\"evaluatedOn\":\"2099-01-01\"}"))
+            http.perform(post("/api/v1/internal/alerts/expiry/evaluate").contentType("application/json").content(body)).andExpect(status().isBadRequest());
+        verifyNoInteractions(alerts,alertRead);
+    }
+    @Test void expiryDependencyErrorKeepsTraceAndHidesDetails() throws Exception {
+        when(alertRead.list(any())).thenThrow(new DataAccessResourceFailureException("private-db-details"));
+        http.perform(get("/api/v1/alerts/expiry").requestAttr("traceId","expiry-http"))
+            .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.traceId").value("expiry-http"))
+            .andExpect(jsonPath("$.message").value("Dependencia no disponible."));
     }
     @Test void ownerEventRequestAndReceiptMapWithoutExtraFields() throws Exception {
         var body=new HashMap<String,Object>();

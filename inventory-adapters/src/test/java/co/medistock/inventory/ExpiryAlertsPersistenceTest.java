@@ -30,6 +30,24 @@ class ExpiryAlertsPersistenceTest {
         assertEquals(10,fixture.balance(entry.lotId())); assertEquals(1,fixture.events(entry.lotId()));
         assertEquals(1,fixture.jdbc.queryForObject("SELECT count(*) FROM inventory.movement WHERE lot_id=?",Integer.class,entry.lotId()));
     }
+    @Test void readerFiltersAndPaginatesPersistedSnapshotsWithoutMutation() {
+        var alert=evaluate(30).orElseThrow(); var reader=new JdbcExpiryAlertRead(fixture.jdbc);
+        var tx=new org.springframework.transaction.support.TransactionTemplate(fixture.tx.getTransactionManager());
+        tx.setReadOnly(true); tx.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        tx.execute(s -> {
+            assertEquals("repeatable read",fixture.jdbc.queryForObject("SHOW transaction_isolation",String.class));
+            var page=reader.list(new ExpiryQuery(1,1,entry.lotId(),"OPEN","EXPIRING"));
+            assertEquals(List.of(alert),page.data()); assertEquals(1,page.meta().total());
+            var second=reader.list(new ExpiryQuery(2,1,entry.lotId(),"OPEN","EXPIRING"));
+            assertTrue(second.data().isEmpty()); assertEquals(1,second.meta().total());
+            assertEquals(0,reader.list(new ExpiryQuery(1,1,entry.lotId(),null,"EXPIRED")).meta().total()); return null;
+        });
+        fixture.tx.execute(s -> new JdbcExits(fixture.jdbc,Clock.fixed(near,ZoneOffset.UTC))
+            .create(fixture.actor,"expiry-read-exit",new NewExit(entry.lotId(),10,"Synthetic"),"expiry-trace"));
+        var resolved=evaluate(30).orElseThrow();
+        assertEquals(List.of(resolved),tx.execute(s -> reader.list(new ExpiryQuery(1,20,entry.lotId(),"RESOLVED",null))).data());
+        assertEquals(1,count(entry.lotId()));
+    }
     @Test void bogotaMidnightChangesSeverityButKeepsFirstDetection() {
         at(Instant.parse("2099-01-01T04:59:59Z")); var first=evaluate(30).orElseThrow();
         assertEquals("EXPIRING",first.severity()); assertEquals(LocalDate.of(2098,12,31),first.evaluatedOn());

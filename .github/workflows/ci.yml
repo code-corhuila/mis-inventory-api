@@ -25,6 +25,7 @@ jobs:
           python3 -m pip install PyYAML==6.0.3 jsonschema==4.26.0 openapi-spec-validator==0.9.0
           python3 tests/check_contracts.py
           python3 -m unittest discover -s tests -p test_event_contract.py -v
+          python3 -m unittest discover -s tests -p test_expiry_contract.py -v
       - name: Parse persistence acceptance script
         shell: pwsh
         run: |
