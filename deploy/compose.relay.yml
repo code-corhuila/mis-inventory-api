@@ -1,0 +1,34 @@
+services:
+  inventory-relay:
+    image: ${INVENTORY_IMAGE:-mis-inventory:local}
+    build: {context: .., dockerfile: deploy/Dockerfile}
+    environment:
+      INVENTORY_RELAY_MODE: 'true'
+      RELAY_DB_URL: jdbc:postgresql://postgres:5432/${PG_DATABASE:?PG_DATABASE required}
+      RELAY_DB_PASSWORD_FILE: /run/relay-db/password
+      RELAY_CREDENTIALS_PATH: /run/credentials
+      RELAY_KEY_ID: ${RELAY_KEY_ID:?RELAY_KEY_ID required}
+      RELAY_ENVIRONMENT: ${RELAY_ENVIRONMENT:?RELAY_ENVIRONMENT required}
+      RELAY_SERVICE_SUBJECT: ${RELAY_SERVICE_SUBJECT:?RELAY_SERVICE_SUBJECT required}
+      RELAY_WORKER_ORIGIN: ${RELAY_WORKER_ORIGIN:-http://worker:8080}
+    volumes:
+      - type: bind
+        source: ${RELAY_PASSWORD_PATH:?RELAY_PASSWORD_PATH required}
+        target: /run/relay-db/password
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${RELAY_CREDENTIALS_PATH:?RELAY_CREDENTIALS_PATH required}
+        target: /run/credentials
+        read_only: true
+        bind: {create_host_path: false}
+    depends_on:
+      inventory: {condition: service_healthy}
+      worker: {condition: service_healthy}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    networks: [platform]
+    restart: unless-stopped
+    stop_grace_period: 25s
