@@ -145,3 +145,19 @@ removes only that container. Supply InfraEnv, SecurityEnv, GatewayUrl and Docker
 The supplied network must provide postgres/security/catalog/suppliers aliases with
 Inventory migrations already applied. Existing domain data is not erased; new audit
 fixtures are retained. No secret values are passed as command-line literals.
+
+## Owner Expiry Evaluation
+
+ExpiryAlerts/ExpiryPolicy and JdbcExpiryAlerts classify and persist one owned lot
+under a row lock, using owner time in America/Bogota and a 1..365-day horizon.
+Physical units, expiry and date come from the owner, not a caller-provided snapshot.
+Replay keeps stable alert identity/first detection; ineligible alerts resolve without
+deletion, and renewed eligibility reopens the same record. Stock is never changed
+by evaluation. Regressed evaluation time is rejected rather than overwriting evidence.
+Requires the seventh Inventory DB changeset; no live migration is performed here.
+See [decision](docs/ADR-WRK-002-owner-expiry-evaluation.md) and
+[native acceptance](docs/WRK-001-evaluation-acceptance.md).
+
+This is an internal application port, not a new HTTP endpoint. Machine authorization,
+worker triggering/scheduling, public alert reads, frontend integration and QA remain
+pending. HU-WRK-001 is not closed and the low-stock flag is unchanged.
