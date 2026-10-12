@@ -1,5 +1,9 @@
 # mis-inventory-api
 
+El nucleo de relay reserva eventos con lease y confirmacion protegida por token;
+ver docs/ADR-EVT-005-fenced-outbox-relay.md. No se activa automaticamente ni
+realiza HTTP todavia. Las pruebas JDBC usan PostgreSQL desechable, no el entorno dev.
+
 El contrato productor de eventos vive en `docs/stock-changed.schema.json`.
 ADR-EVT-001 documenta el outbox existente; ADR-EVT-002 define la frontera prevista
 del relay y consumidor. Contrato publicado no significa entrega implementada.
