@@ -26,6 +26,7 @@ jobs:
           python3 tests/check_contracts.py
           python3 -m unittest discover -s tests -p test_event_contract.py -v
           python3 -m unittest discover -s tests -p test_expiry_contract.py -v
+          python3 -m py_compile tests/expiry_check.py
       - name: Parse persistence acceptance script
         shell: pwsh
         run: |

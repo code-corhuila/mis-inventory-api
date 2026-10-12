@@ -50,7 +50,7 @@ public class JdbcExpiryAlerts implements ExpiryAlerts {
                 window_days=excluded.window_days,evaluated_by=excluded.evaluated_by,
                 last_evaluated_at=excluded.last_evaluated_at,resolved_at=excluded.resolved_at
             """,UUID.randomUUID(),lotId,kind,state,lot.expires(),lot.onHand(),today,windowDays,actor,
-            Timestamp.from(now),Timestamp.from(now),resolved==null?null:Timestamp.from(resolved));
+            Timestamp.from(old==null?now:old.firstDetectedAt()),Timestamp.from(now),resolved==null?null:Timestamp.from(resolved));
         return Optional.of(alerts(lotId).get(0));
     }
 }
