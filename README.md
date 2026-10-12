@@ -4,6 +4,12 @@ El contrato productor de eventos vive en `docs/stock-changed.schema.json`.
 ADR-EVT-001 documenta el outbox existente; ADR-EVT-002 define la frontera prevista
 del relay y consumidor. Contrato publicado no significa entrega implementada.
 
+La operacion interna de eventos valida el origen y registra inbox/checkpoint en una
+transaccion propia, sin volver a descontar/sumar stock. Requiere identidad JWT
+mis-worker y rol INVENTORY; tokens humanos no bastan. Consulte ADR-EVT-004.
+Requiere la quinta migracion de mis-inventory-db. Pruebas JDBC y autorizacion por
+metodo estan incluidas; transporte, credenciales Worker y relay siguen pendientes.
+
 > inventory bounded context: service API
 
 Part of the **Medicine Inventory System** distributed system — team `medicine-inventory-system`, Grupo 1.

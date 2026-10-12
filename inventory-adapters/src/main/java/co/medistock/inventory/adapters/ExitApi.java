@@ -20,7 +20,7 @@ public class ExitApi {
     }
     private final Exits exits;
     public ExitApi(Exits exits) { this.exits=exits; }
-    @PostMapping("/api/v1/exits") @PreAuthorize("hasAnyRole('ADMIN','INVENTORY')")
+    @PostMapping("/api/v1/exits") @PreAuthorize("hasAnyRole('ADMIN','INVENTORY') and authentication.token.getClaimAsString('service') == null")
     public ResponseEntity<Exits.Exit> create(@AuthenticationPrincipal Jwt jwt,
         @RequestHeader(value="Idempotency-Key",required=false) String key,@RequestBody Request body,HttpServletRequest request) {
         var result=exits.create(UUID.fromString(jwt.getSubject()),key,body.normalized(),request.getAttribute("traceId").toString());
