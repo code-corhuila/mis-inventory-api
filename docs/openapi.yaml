@@ -3,6 +3,24 @@ info: {title: MediStock - Inventario, version: 2.0.0}
 servers: [{url: 'http://localhost:8080'}]
 security: [{bearerAuth: []}]
 paths:
+  /api/v1/internal/events/stock-changed:
+    post:
+      operationId: applyStockEvent
+      description: 'Solo JWT con rol INVENTORY y claim service=mis-worker. Compara con el outbox propio y confirma inbox/checkpoint atomicos; no vuelve a modificar stock. Replays y secuencias antiguas devuelven applied=false. No es una ruta publica para humanos.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: './stock-changed.schema.json'}}}
+      responses:
+        '200':
+          description: Evento registrado durablemente; applied indica avance de checkpoint en esta solicitud.
+          content: {application/json: {schema: {$ref: '#/components/schemas/EventReceipt'}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
   /health:
     get:
       security: []
@@ -11,7 +29,7 @@ paths:
   /api/v1/exits:
     post:
       operationId: createExit
-      description: 'ADMIN o INVENTORY. Descuenta stock y confirma salida, movimiento e intencion en una transaccion. No admite lotes vencidos ni unidades pendientes. Reintento devuelve el snapshot original sin volver a descontar, aunque el lote venza despues. Rechazos no consumen la clave.'
+      description: 'ADMIN o INVENTORY humano, sin claim service. Descuenta stock y confirma salida, movimiento e intencion en una transaccion. No admite lotes vencidos ni unidades pendientes. Reintento devuelve el snapshot original sin volver a descontar, aunque el lote venza despues. Rechazos no consumen la clave.'
       parameters: [{$ref: '#/components/parameters/Key'}]
       requestBody:
         required: true
@@ -91,7 +109,7 @@ paths:
   /api/v1/entries:
     post:
       operationId: prepareEntry
-      description: ADMIN o INVENTORY. Prepara sin sumar stock. Reintento devuelve la representacion original, incluso tras activar.
+      description: ADMIN o INVENTORY humano o servicio mis-workflow. Prepara sin sumar stock. Reintento devuelve la representacion original, incluso tras activar.
       parameters: [{$ref: '#/components/parameters/Key'}]
       requestBody:
         required: true
@@ -130,7 +148,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/Id'}]
     post:
       operationId: activateEntry
-      description: ADMIN o INVENTORY. PENDING a ACTIVE; stock y movimiento atomicos. Repetir ACTIVE no suma unidades. Un lote vencido no se activa.
+      description: ADMIN o INVENTORY humano o servicio mis-workflow. PENDING a ACTIVE; stock y movimiento atomicos. Repetir ACTIVE no suma unidades. Un lote vencido no se activa.
       parameters: [{$ref: '#/components/parameters/Key'}]
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
@@ -147,7 +165,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/Id'}]
     post:
       operationId: cancelEntry
-      description: ADMIN o INVENTORY. PENDING a CANCELLED; no elimina evidencia ni altera stock. ACTIVE no puede cancelarse.
+      description: ADMIN o INVENTORY humano o servicio mis-workflow. PENDING a CANCELLED; no elimina evidencia ni altera stock. ACTIVE no puede cancelarse.
       parameters: [{$ref: '#/components/parameters/Key'}]
       requestBody: {$ref: '#/components/requestBodies/Empty'}
       responses:
@@ -191,6 +209,14 @@ components:
       headers: {X-Correlation-Id: {schema: {type: string}}}
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    EventReceipt:
+      type: object
+      additionalProperties: false
+      required: [eventId, sequence, applied]
+      properties:
+        eventId: {$ref: '#/components/schemas/Uuid'}
+        sequence: {type: integer, minimum: 1, maximum: 9223372036854775807}
+        applied: {type: boolean}
     NewExit:
       type: object
       additionalProperties: false

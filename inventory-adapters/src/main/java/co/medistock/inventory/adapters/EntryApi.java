@@ -22,7 +22,7 @@ public class EntryApi {
     private final Entries entries;
     private final JdbcTemplate jdbc;
     public EntryApi(Entries entries,JdbcTemplate jdbc) { this.entries=entries; this.jdbc=jdbc; }
-    @PostMapping("/api/v1/entries") @PreAuthorize("hasAnyRole('ADMIN','INVENTORY')")
+    @PostMapping("/api/v1/entries") @PreAuthorize("hasAnyRole('ADMIN','INVENTORY') and (authentication.token.getClaimAsString('service') == null or authentication.token.getClaimAsString('service') == 'mis-workflow')")
     public ResponseEntity<Entry> prepare(@AuthenticationPrincipal Jwt jwt,
         @RequestHeader(value="Idempotency-Key",required=false) String key,@RequestBody Request body,HttpServletRequest request) {
         var result=entries.prepare(UUID.fromString(jwt.getSubject()),key,body.normalized(),jwt.getTokenValue(),request.getAttribute("traceId").toString());
@@ -30,7 +30,7 @@ public class EntryApi {
     }
     @GetMapping("/api/v1/entries/{id}") @PreAuthorize("hasAnyRole('ADMIN','INVENTORY','SUPERVISOR')")
     public Entry find(@PathVariable String id) { return entries.find(NewEntry.uuid(id,"id")); }
-    @PostMapping("/api/v1/entries/{id}/{action:activate|cancel}") @PreAuthorize("hasAnyRole('ADMIN','INVENTORY')")
+    @PostMapping("/api/v1/entries/{id}/{action:activate|cancel}") @PreAuthorize("hasAnyRole('ADMIN','INVENTORY') and (authentication.token.getClaimAsString('service') == null or authentication.token.getClaimAsString('service') == 'mis-workflow')")
     public Entry transition(@AuthenticationPrincipal Jwt jwt,@PathVariable String id,@PathVariable String action,
         @RequestHeader(value="Idempotency-Key",required=false) String key,
         @RequestBody(required=false) Map<String,Object> body,HttpServletRequest request) {
@@ -44,6 +44,8 @@ public class EntryApi {
         jdbc.queryForObject("SELECT count(*) FROM inventory.stock_exit WHERE false",Long.class);
         jdbc.queryForObject("SELECT count(*) FROM inventory.exit_request WHERE false",Long.class);
         jdbc.queryForObject("SELECT count(*) FROM inventory.outbox WHERE false",Long.class);
+        jdbc.queryForObject("SELECT count(*) FROM inventory.stock_event_inbox WHERE false",Long.class);
+        jdbc.queryForObject("SELECT count(*) FROM inventory.stock_event_checkpoint WHERE false",Long.class);
         return Map.of("status","UP");
     }
 }

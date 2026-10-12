@@ -8,7 +8,6 @@ import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -17,12 +16,13 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class RolePermissionsTest {
-    @Configuration @EnableMethodSecurity @Import({EntryApi.class,ExitApi.class,InventoryReadApi.class})
+    @Configuration @EnableMethodSecurity @Import({EntryApi.class,ExitApi.class,InventoryReadApi.class,StockEventApi.class})
     static class Config {
         @Bean Entries entries() { return mock(Entries.class); }
         @Bean Exits exits() { return mock(Exits.class); }
         @Bean InventoryRead read() { return mock(InventoryRead.class); }
         @Bean JdbcTemplate jdbc() { return mock(JdbcTemplate.class); }
+        @Bean StockEvents stockEvents() { return mock(StockEvents.class); }
     }
     @Test void methodSecurityEnforcesRoleMatrix() {
         UUID actor=UUID.randomUUID(),id=UUID.randomUUID();
@@ -30,7 +30,8 @@ class RolePermissionsTest {
         var request=new MockHttpServletRequest(); request.setAttribute("traceId","role-test");
         try(var context=new AnnotationConfigApplicationContext(Config.class)) {
             for(String role:List.of("ADMIN","INVENTORY","SUPERVISOR","CONSULTATION")) {
-                SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(actor.toString(),"unused","ROLE_"+role));
+                SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                    jwt,List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_"+role))));
                 var entry=context.getBean(EntryApi.class); var exit=context.getBean(ExitApi.class); var read=context.getBean(InventoryReadApi.class);
                 assertDoesNotThrow(() -> read.stock(new LinkedMultiValueMap<>()));
                 if(role.equals("CONSULTATION")) {
@@ -44,6 +45,31 @@ class RolePermissionsTest {
                 if(Set.of("ADMIN","INVENTORY").contains(role))
                     assertDoesNotThrow(() -> entry.transition(jwt,id.toString(),"activate","role-key",null,request));
                 else assertThrows(AccessDeniedException.class,() -> entry.transition(jwt,id.toString(),"activate","role-key",null,request));
+            }
+        } finally { SecurityContextHolder.clearContext(); }
+    }
+    @Test void eventEndpointRequiresSignedWorkerServiceClaimAndInventoryRole() {
+        try(var context=new AnnotationConfigApplicationContext(Config.class)) {
+            for(String service:List.of("human","mis-workflow","mis-inventory-relay","mis-worker")) {
+                var builder=Jwt.withTokenValue("synthetic").header("alg","RS256").subject(UUID.randomUUID().toString());
+                if(!service.equals("human")) builder.claim("service",service);
+                var jwt=builder.build();
+                SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                    jwt,List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_INVENTORY"))));
+                var endpoint=context.getBean(StockEventApi.class);
+                if(service.equals("mis-worker")) {
+                    assertThrows(InventoryFailure.class,() -> endpoint.apply(jwt,Map.of()));
+                    SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                        jwt,List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
+                    assertThrows(AccessDeniedException.class,() -> endpoint.apply(jwt,Map.of()));
+                }
+                else assertThrows(AccessDeniedException.class,() -> endpoint.apply(jwt,Map.of()));
+                var request=new MockHttpServletRequest(); request.setAttribute("traceId","role-test");
+                var entries=context.getBean(EntryApi.class); String id=UUID.randomUUID().toString();
+                if(Set.of("human","mis-workflow").contains(service))
+                    assertDoesNotThrow(() -> entries.transition(jwt,id,"activate","role-key",null,request));
+                else assertThrows(AccessDeniedException.class,() -> entries.transition(jwt,id,"activate","role-key",null,request));
+                if(!service.equals("human")) assertThrows(AccessDeniedException.class,() -> context.getBean(ExitApi.class).create(jwt,"role-key",null,request));
             }
         } finally { SecurityContextHolder.clearContext(); }
     }

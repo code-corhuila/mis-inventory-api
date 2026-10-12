@@ -22,6 +22,7 @@ class InventoryHttpTest {
     Entries entries=mock(Entries.class);
     Exits exits=mock(Exits.class);
     InventoryRead read=mock(InventoryRead.class);
+    StockEvents stockEvents=mock(StockEvents.class);
     JdbcTemplate jdbc=mock(JdbcTemplate.class);
     UUID actor=UUID.randomUUID(),id=UUID.randomUUID(),lot=UUID.randomUUID(),med=UUID.randomUUID(),supplier=UUID.randomUUID();
     Entry entry=new Entry(id,lot,med,supplier,"LOT-1",LocalDate.of(2099,1,1),10,"PENDING",actor,Instant.parse("2026-10-11T12:00:00Z"));
@@ -33,7 +34,7 @@ class InventoryHttpTest {
     @BeforeEach void setup() {
         // Principal sintetico y puertos mock: no valida firmas, filtros ni autorizacion.
         var jwt=Jwt.withTokenValue("synthetic").header("alg","RS256").subject(actor.toString()).build();
-        http=MockMvcBuilders.standaloneSetup(new EntryApi(entries,jdbc),new ExitApi(exits),new InventoryReadApi(read))
+        http=MockMvcBuilders.standaloneSetup(new EntryApi(entries,jdbc),new ExitApi(exits),new InventoryReadApi(read),new StockEventApi(stockEvents))
             .setControllerAdvice(new Errors()).setCustomArgumentResolvers(new HandlerMethodArgumentResolver() {
                 public boolean supportsParameter(MethodParameter p) { return p.getParameterType()==Jwt.class; }
                 public Object resolveArgument(MethodParameter p,ModelAndViewContainer c,NativeWebRequest w,WebDataBinderFactory b) { return jwt; }
@@ -108,7 +109,24 @@ class InventoryHttpTest {
     }
     @Test void healthChecksEveryOwnedPersistenceTable() throws Exception {
         http.perform(get("/health")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
-        verify(jdbc,times(6)).queryForObject(anyString(),eq(Long.class));
+        verify(jdbc,times(8)).queryForObject(anyString(),eq(Long.class));
         verifyNoInteractions(entries,exits,read);
+    }
+    @Test void ownerEventRequestAndReceiptMapWithoutExtraFields() throws Exception {
+        var body=new HashMap<String,Object>();
+        body.putAll(Map.of("eventId",id.toString(),"movementId",id.toString(),"lotId",lot.toString(),"medicationId",med.toString(),
+            "supplierId",supplier.toString(),"eventType","inventory.stock.changed","schemaVersion",1,"sequence",1,
+            "occurredAt","2026-10-11T12:00:00Z","traceId","original-event"));
+        body.putAll(Map.of("movementType","ENTRY","expiresOn","2099-01-01","quantity",10,"delta",10,"onHandQuantity",10,"entryId",id.toString()));
+        body.put("exitId",null);
+        when(stockEvents.apply(eq(actor),any(StockEvent.class))).thenReturn(new StockEvents.Result(id,1,true));
+        var mapper=tools.jackson.databind.json.JsonMapper.builder().build();
+        http.perform(post("/api/v1/internal/events/stock-changed").contentType("application/json").content(mapper.writeValueAsString(body)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.eventId").value(id.toString()))
+            .andExpect(jsonPath("$.sequence").value(1)).andExpect(jsonPath("$.applied").value(true));
+        body.put("unknown",true);
+        http.perform(post("/api/v1/internal/events/stock-changed").contentType("application/json").content(mapper.writeValueAsString(body)))
+            .andExpect(status().isBadRequest());
+        verify(stockEvents).apply(eq(actor),any(StockEvent.class)); verifyNoMoreInteractions(stockEvents);
     }
 }
