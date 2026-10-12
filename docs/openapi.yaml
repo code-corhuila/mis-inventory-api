@@ -1,0 +1,306 @@
+openapi: 3.1.0
+info: {title: MediStock - Inventario, version: 2.0.0}
+servers: [{url: 'http://localhost:8080'}]
+security: [{bearerAuth: []}]
+paths:
+  /health:
+    get:
+      security: []
+      responses:
+        '200': {description: Owned persistence is readable, content: {application/json: {schema: {type: object, required: [status], properties: {status: {const: UP}}}}}}
+  /api/v1/exits:
+    post:
+      operationId: createExit
+      description: 'ADMIN o INVENTORY. Descuenta stock y confirma salida, movimiento e intencion en una transaccion. No admite lotes vencidos ni unidades pendientes. Reintento devuelve el snapshot original sin volver a descontar, aunque el lote venza despues. Rechazos no consumen la clave.'
+      parameters: [{$ref: '#/components/parameters/Key'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NewExit'}}}
+      responses:
+        '201':
+          description: Salida confirmada e irreversible.
+          headers:
+            Location: {schema: {type: string}, description: '/api/v1/exits/{id}'}
+            X-Correlation-Id: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Exit'}}}
+        '200': {$ref: '#/components/responses/Exit'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/exits/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      operationId: findExit
+      description: ADMIN, INVENTORY o SUPERVISOR. No permite cancelar o actualizar una salida confirmada.
+      responses:
+        '200': {$ref: '#/components/responses/Exit'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/stock:
+    get:
+      operationId: listStock
+      description: 'Los cuatro roles. Orden expiresOn ASC y lotId ASC. Unidades registradas separadas de disponibles y pendientes; vencido al inicio de expiresOn en America/Bogota. Filtros combinados con AND; sin coincidencias devuelve lista vacia. Se rechazan parametros desconocidos o repetidos. Una pagina y su total comparten snapshot; distintas solicitudes no congelan cambios concurrentes.'
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Medication'}
+        - {$ref: '#/components/parameters/Supplier'}
+        - {$ref: '#/components/parameters/Lot'}
+        - {name: expired, in: query, schema: {type: boolean}, description: 'Solo true o false en minusculas.'}
+      responses:
+        '200':
+          description: Existencias por lote, incluidas las de cero unidades.
+          headers: {X-Correlation-Id: {schema: {type: string}}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/StockPage'}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/movements:
+    get:
+      operationId: listMovements
+      description: 'ADMIN, INVENTORY o SUPERVISOR. Orden createdAt DESC e id DESC. Solo movimientos confirmados; preparar o cancelar no genera filas. Filtros AND, sin coincidencias lista vacia. from/to son dias inclusivos en America/Bogota. No acepta parametros desconocidos o repetidos. Snapshot por solicitud, no entre paginas.'
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Medication'}
+        - {$ref: '#/components/parameters/Supplier'}
+        - {$ref: '#/components/parameters/Lot'}
+        - {name: from, in: query, schema: {type: string, format: date, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'}, description: 'Primer dia, ano 1 a 9999.'}
+        - {name: to, in: query, schema: {type: string, format: date, pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'}, description: 'Ultimo dia, ano 1 a 9999; no anterior a from.'}
+      responses:
+        '200':
+          description: Historial de movimientos.
+          headers: {X-Correlation-Id: {schema: {type: string}}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MovementPage'}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/entries:
+    post:
+      operationId: prepareEntry
+      description: ADMIN o INVENTORY. Prepara sin sumar stock. Reintento devuelve la representacion original, incluso tras activar.
+      parameters: [{$ref: '#/components/parameters/Key'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NewEntry'}
+      responses:
+        '201':
+          description: Entrada pendiente creada.
+          headers:
+            Location: {schema: {type: string}, description: '/api/v1/entries/{id}'}
+            X-Correlation-Id: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Entry'}}}
+        '200': {$ref: '#/components/responses/Entry'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/entries/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      operationId: findEntry
+      description: ADMIN, INVENTORY o SUPERVISOR. Consulta no tiene acceso al historial de entradas.
+      responses:
+        '200': {$ref: '#/components/responses/Entry'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/entries/{id}/activate:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    post:
+      operationId: activateEntry
+      description: ADMIN o INVENTORY. PENDING a ACTIVE; stock y movimiento atomicos. Repetir ACTIVE no suma unidades. Un lote vencido no se activa.
+      parameters: [{$ref: '#/components/parameters/Key'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/Entry'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/v1/entries/{id}/cancel:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    post:
+      operationId: cancelEntry
+      description: ADMIN o INVENTORY. PENDING a CANCELLED; no elimina evidencia ni altera stock. ACTIVE no puede cancelarse.
+      parameters: [{$ref: '#/components/parameters/Key'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/Entry'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT RS256}
+  parameters:
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}, description: 'Entero decimal sin signo, espacios ni ceros iniciales.'}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}, description: 'Entero decimal sin signo, espacios ni ceros iniciales.'}
+    Medication: {name: medicationId, in: query, schema: {$ref: '#/components/schemas/Uuid'}}
+    Supplier: {name: supplierId, in: query, schema: {$ref: '#/components/schemas/Uuid'}}
+    Lot: {name: lotId, in: query, schema: {$ref: '#/components/schemas/Uuid'}}
+    Id: {name: id, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    Key: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._:-]{8,128}$'}}
+  requestBodies:
+    Empty:
+      required: false
+      content: {application/json: {schema: {type: object, additionalProperties: false, maxProperties: 0}}}
+  responses:
+    Exit:
+      description: Salida confirmada; remainingQuantity es el saldo al confirmarla, no el saldo vigente.
+      headers:
+        Location: {schema: {type: string}}
+        X-Correlation-Id: {schema: {type: string}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Exit'}}}
+    Entry:
+      description: Entrada o respuesta original idempotente.
+      headers: {X-Correlation-Id: {schema: {type: string}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Entry'}}}
+    Error:
+      description: Error comun; 400 VALIDATION_ERROR, 401 UNAUTHORIZED, 403 FORBIDDEN, 404 NOT_FOUND, 409 IDEMPOTENCY_CONFLICT, 422 BUSINESS_RULE_VIOLATION/INSUFFICIENT_STOCK/LOT_EXPIRED o 503 SERVICE_UNAVAILABLE.
+      headers: {X-Correlation-Id: {schema: {type: string}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  schemas:
+    NewExit:
+      type: object
+      additionalProperties: false
+      required: [lotId, quantity, reason]
+      properties:
+        lotId: {$ref: '#/components/schemas/Uuid'}
+        quantity: {type: integer, minimum: 1, maximum: 1000000}
+        reason: {type: string, description: 'Recortado; 1 a 200 caracteres Unicode, sin controles. La normalizacion se usa en la idempotencia.'}
+    Exit:
+      type: object
+      additionalProperties: false
+      required: [id, lotId, medicationId, supplierId, lotNumber, quantity, reason, remainingQuantity, createdBy, createdAt]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        lotId: {$ref: '#/components/schemas/Uuid'}
+        medicationId: {$ref: '#/components/schemas/Uuid'}
+        supplierId: {$ref: '#/components/schemas/Uuid'}
+        lotNumber: {type: string, pattern: '^[A-Z0-9-]{1,40}$'}
+        quantity: {type: integer, minimum: 1, maximum: 1000000}
+        reason: {type: string, minLength: 1, maxLength: 200}
+        remainingQuantity: {type: integer, minimum: 0, maximum: 2147483647}
+        createdBy: {$ref: '#/components/schemas/Uuid'}
+        createdAt: {type: string, format: date-time}
+    Meta:
+      type: object
+      additionalProperties: false
+      required: [page, limit, total]
+      properties:
+        page: {type: integer, minimum: 1, maximum: 1000000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0, description: 'Numero de filas que cumplen todos los filtros; no suma unidades.'}
+    StockPage:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Stock'}}
+        meta: {$ref: '#/components/schemas/Meta'}
+    MovementPage:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Movement'}}
+        meta: {$ref: '#/components/schemas/Meta'}
+    Stock:
+      type: object
+      additionalProperties: false
+      required: [lotId, medicationId, supplierId, lotNumber, expiresOn, onHandQuantity, availableQuantity, pendingQuantity, expired]
+      properties:
+        lotId: {$ref: '#/components/schemas/Uuid'}
+        medicationId: {$ref: '#/components/schemas/Uuid'}
+        supplierId: {$ref: '#/components/schemas/Uuid'}
+        lotNumber: {type: string, pattern: '^[A-Z0-9-]{1,40}$'}
+        expiresOn: {type: string, format: date}
+        onHandQuantity: {type: integer, minimum: 0, maximum: 2147483647, description: 'Saldo registrado por movimientos, aun cuando el lote venza.'}
+        availableQuantity: {type: integer, minimum: 0, maximum: 2147483647, description: 'Saldo utilizable: cero en lotes vencidos; no incluye pendientes.'}
+        pendingQuantity: {type: integer, minimum: 0, description: 'Suma de entradas PENDING; no es stock ni reserva.'}
+        expired: {type: boolean}
+    Movement:
+      type: object
+      additionalProperties: false
+      required: [id, entryId, exitId, lotId, medicationId, supplierId, lotNumber, type, quantity, actor, createdAt]
+      oneOf:
+        - properties: {type: {const: ENTRY}, entryId: {$ref: '#/components/schemas/Uuid'}, exitId: {type: 'null'}}
+        - properties: {type: {const: EXIT}, entryId: {type: 'null'}, exitId: {$ref: '#/components/schemas/Uuid'}}
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        entryId: {anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        exitId: {anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        lotId: {$ref: '#/components/schemas/Uuid'}
+        medicationId: {$ref: '#/components/schemas/Uuid'}
+        supplierId: {$ref: '#/components/schemas/Uuid'}
+        lotNumber: {type: string, pattern: '^[A-Z0-9-]{1,40}$'}
+        type: {type: string, enum: [ENTRY, EXIT], description: 'Cantidad positiva: sumar ENTRY y restar EXIT para conciliar onHandQuantity.'}
+        quantity: {type: integer, minimum: 1, maximum: 1000000}
+        actor: {$ref: '#/components/schemas/Uuid'}
+        createdAt: {type: string, format: date-time}
+    Uuid: {type: string, format: uuid, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'}
+    NewEntry:
+      type: object
+      additionalProperties: false
+      required: [medicationId, supplierId, lotNumber, expiresOn, quantity]
+      properties:
+        medicationId: {$ref: '#/components/schemas/Uuid'}
+        supplierId: {$ref: '#/components/schemas/Uuid'}
+        lotNumber: {type: string, description: 'Recortado y normalizado a mayusculas; ASCII alfanumerico o guion, 1 a 40 caracteres normalizados.'}
+        expiresOn: {type: string, format: date, description: 'Debe ser posterior a hoy en America/Bogota; vence al inicio de esa fecha.'}
+        quantity: {type: integer, minimum: 1, maximum: 1000000}
+    Entry:
+      type: object
+      additionalProperties: false
+      required: [id, lotId, medicationId, supplierId, lotNumber, expiresOn, quantity, status, createdBy, createdAt]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        lotId: {$ref: '#/components/schemas/Uuid'}
+        medicationId: {$ref: '#/components/schemas/Uuid'}
+        supplierId: {$ref: '#/components/schemas/Uuid'}
+        lotNumber: {type: string, pattern: '^[A-Z0-9-]{1,40}$'}
+        expiresOn: {type: string, format: date}
+        quantity: {type: integer, minimum: 1, maximum: 1000000}
+        status: {type: string, enum: [PENDING, ACTIVE, CANCELLED]}
+        createdBy: {$ref: '#/components/schemas/Uuid'}
+        createdAt: {type: string, format: date-time}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, message, traceId]
+      properties:
+        error: {type: string}
+        message: {type: string}
+        traceId: {type: string}
+        details: {type: array, items: {type: object, required: [field, message], properties: {field: {type: string}, message: {type: string}}}}
