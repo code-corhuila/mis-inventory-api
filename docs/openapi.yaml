@@ -3,6 +3,41 @@ info: {title: MediStock - Inventario, version: 2.0.0}
 servers: [{url: 'http://localhost:8080'}]
 security: [{bearerAuth: []}]
 paths:
+  /api/v1/internal/alerts/expiry/evaluate:
+    post:
+      operationId: evaluateExpiryAlert
+      description: 'Only INVENTORY with service=mis-worker. Reads owned lot balance/date under lock. Repeats refresh current state, not an immutable keyed response. alertPresent includes RESOLVED records. No client balance/date or Idempotency-Key required.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NewExpiryEvaluation'}}}
+      responses:
+        '200':
+          description: Current evaluation; no record is created for a never-eligible lot.
+          content: {application/json: {schema: {$ref: '#/components/schemas/ExpiryEvaluation'}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {description: EVALUATION_CLOCK_REGRESSED; no mutation., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/v1/alerts/expiry:
+    get:
+      operationId: listExpiryAlerts
+      description: 'Human ADMIN, INVENTORY or SUPERVISOR, without service claim. Persisted evaluations, not live balances. AND filters; rejects unknown/repeated/empty parameters. Stable expiresOn/lotId ascending order. Page and count share a read-only repeatable-read snapshot, not across requests.'
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Lot'}
+        - {name: state, in: query, schema: {type: string, enum: [OPEN, RESOLVED]}}
+        - {name: severity, in: query, schema: {type: string, enum: [EXPIRING, EXPIRED]}}
+      responses:
+        '200':
+          description: Alert history, including resolved records; empty data does not imply evaluation ran.
+          content: {application/json: {schema: {$ref: '#/components/schemas/ExpiryAlertPage'}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
   /api/v1/internal/events/stock-changed:
     post:
       operationId: applyStockEvent
@@ -209,6 +244,51 @@ components:
       headers: {X-Correlation-Id: {schema: {type: string}}}
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    NewExpiryEvaluation:
+      type: object
+      additionalProperties: false
+      required: [lotId, windowDays]
+      properties:
+        lotId: {$ref: '#/components/schemas/Uuid'}
+        windowDays: {type: integer, minimum: 1, maximum: 365}
+    ExpiryEvaluation:
+      type: object
+      additionalProperties: false
+      required: [lotId, alertPresent, alert]
+      oneOf:
+        - properties: {alertPresent: {const: false}, alert: {type: 'null'}}
+        - properties: {alertPresent: {const: true}, alert: {$ref: '#/components/schemas/ExpiryAlert'}}
+      properties:
+        lotId: {$ref: '#/components/schemas/Uuid'}
+        alertPresent: {type: boolean}
+        alert: {anyOf: [{$ref: '#/components/schemas/ExpiryAlert'}, {type: 'null'}]}
+    ExpiryAlertPage:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/ExpiryAlert'}}
+        meta: {$ref: '#/components/schemas/Meta'}
+    ExpiryAlert:
+      type: object
+      additionalProperties: false
+      required: [id, lotId, severity, state, expiresOn, onHandQuantity, evaluatedOn, windowDays, evaluatedBy, firstDetectedAt, lastEvaluatedAt, resolvedAt]
+      oneOf:
+        - properties: {state: {const: OPEN}, resolvedAt: {type: 'null'}}
+        - properties: {state: {const: RESOLVED}, resolvedAt: {type: string, format: date-time}}
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        lotId: {$ref: '#/components/schemas/Uuid'}
+        severity: {type: string, enum: [EXPIRING, EXPIRED]}
+        state: {type: string, enum: [OPEN, RESOLVED]}
+        expiresOn: {type: string, format: date}
+        onHandQuantity: {type: integer, minimum: 0, maximum: 2147483647}
+        evaluatedOn: {type: string, format: date}
+        windowDays: {type: integer, minimum: 1, maximum: 365}
+        evaluatedBy: {$ref: '#/components/schemas/Uuid'}
+        firstDetectedAt: {type: string, format: date-time}
+        lastEvaluatedAt: {type: string, format: date-time}
+        resolvedAt: {type: [string, 'null'], format: date-time}
     EventReceipt:
       type: object
       additionalProperties: false

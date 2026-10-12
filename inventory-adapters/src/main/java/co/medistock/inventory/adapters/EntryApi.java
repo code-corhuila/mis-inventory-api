@@ -46,6 +46,7 @@ public class EntryApi {
         jdbc.queryForObject("SELECT count(*) FROM inventory.outbox WHERE false",Long.class);
         jdbc.queryForObject("SELECT count(*) FROM inventory.stock_event_inbox WHERE false",Long.class);
         jdbc.queryForObject("SELECT count(*) FROM inventory.stock_event_checkpoint WHERE false",Long.class);
+        jdbc.queryForObject("SELECT count(*) FROM inventory.expiry_alert WHERE false",Long.class);
         return Map.of("status","UP");
     }
 }
