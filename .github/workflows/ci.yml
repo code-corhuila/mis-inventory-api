@@ -22,13 +22,13 @@ jobs:
         run: mvn -B verify
       - name: Validate OpenAPI
         run: |
-          python3 -m pip install PyYAML==6.0.3 openapi-spec-validator==0.9.0
-          python3 -c 'import yaml; from openapi_spec_validator import validate_spec; validate_spec(yaml.safe_load(open("docs/openapi.yaml", encoding="utf-8")))'
+          python3 -m pip install PyYAML==6.0.3 jsonschema==4.26.0 openapi-spec-validator==0.9.0
+          python3 tests/check_contracts.py
       - name: Parse persistence acceptance script
         shell: pwsh
         run: |
           $tokens=$null; $errors=$null
-          foreach($script in @('Test-Persistence.ps1','Test-Access.ps1')) {
+          foreach($script in @('Test-Persistence.ps1','Test-Access.ps1','Test-Integration.ps1','Test-Publication.ps1')) {
             [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/tests/$script",[ref]$tokens,[ref]$errors)
             if($errors.Count) { throw ($errors -join "`n") }
           }
