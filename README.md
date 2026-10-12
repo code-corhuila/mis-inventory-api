@@ -97,3 +97,11 @@ JSON rejects unknown fields and scalar coercion; POST bodies are limited to 64 K
 Tests use ephemeral RSA keys, method-security proxies with synthetic authentication,
 and servlet mocks. They do not prove the live JWKS/filter/upstream integration.
 Container deployment and real HTTP acceptance follow separately.
+
+## Container And Contract
+
+`deploy/Dockerfile` verifies Maven modules and runs the jar as UID 10001.
+`deploy/compose.yml` joins the shared platform without publishing host ports.
+OpenAPI 3.1 is validated in CI. `tests/Test-Access.ps1` takes BaseUrl, SecurityUrl
+and the ignored SecurityEnv path; it checks real login/JWKS, correlation and roles
+without creating data. Full write/replay integration acceptance follows separately.
