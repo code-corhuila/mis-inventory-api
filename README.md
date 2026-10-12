@@ -164,3 +164,17 @@ Requires all seven DB changesets: health now checks nine owned tables, including
 expiry_alert. Do not deploy this API against the earlier four-changeset dev schema.
 Gateway routing, worker triggering/scheduling, frontend integration and QA remain
 pending. HU-WRK-001 is not closed and the low-stock flag is unchanged.
+
+## Signed Expiry Pipeline Acceptance
+
+Test-EventPipeline.ps1 -ExpiryAlerts additionally requires GatewayRoot. It builds
+the real Inventory API, Worker, relay and Gateway with all seven DB changesets in
+a random disposable project, enabling event evaluation and 60-second scans only
+there. It exercises lost ACK/retry, Worker restart, historical lots without pending
+events, interval scans, actual HTTP exit/replay/resolution, signed read permissions
+and response schemas. Security's service issuer uses ephemeral fixture RSA keys;
+human tokens, JWKS and reference services are synthetic, not real login/upstream
+acceptance. SQL seeds are fixture preparation, not claims about entry HTTP behavior.
+Default execution without -ExpiryAlerts preserves the existing event-only test.
+See docs/WRK-001-signed-pipeline-acceptance.md. This does not align/migrate active
+dev, close the HU or replace QA/promotion evidence.

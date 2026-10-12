@@ -71,6 +71,16 @@ class ExpiryAlertsPersistenceTest {
         var pending=fixture.prepare("expiry-only-pending",new NewEntry(entry.medicationId(),entry.supplierId(),UUID.randomUUID().toString(),entry.expiresOn(),4)).entry();
         assertTrue(fixture.tx.execute(s -> alerts.evaluate(fixture.actor,pending.lotId(),365)).isEmpty()); assertEquals(0,count(pending.lotId()));
     }
+    @Test void resolvedReevaluationWithLaterClockKeepsOriginalAudit() {
+        var first=evaluate(30).orElseThrow();
+        fixture.tx.execute(s -> new JdbcExits(fixture.jdbc,Clock.fixed(near,ZoneOffset.UTC))
+            .create(fixture.actor,"expiry-later-resolution",new NewExit(entry.lotId(),10,"Synthetic"),"expiry-trace"));
+        var resolved=evaluate(30).orElseThrow(); at(near.plusSeconds(60));
+        var replay=evaluate(30).orElseThrow(); assertEquals(first.id(),replay.id());
+        assertEquals(first.firstDetectedAt(),replay.firstDetectedAt()); assertEquals(resolved.resolvedAt(),replay.resolvedAt());
+        assertEquals(near.plusSeconds(60),replay.lastEvaluatedAt()); assertEquals("RESOLVED",replay.state());
+        assertEquals(0,fixture.balance(entry.lotId())); assertEquals(2,fixture.events(entry.lotId()));
+    }
     @Test void rejectsMissingIdentityLotAndClockRegressionWithoutMutation() {
         assertEquals(400,assertThrows(InventoryFailure.class,() -> fixture.tx.execute(s -> alerts.evaluate(null,entry.lotId(),30))).status());
         assertEquals(400,assertThrows(InventoryFailure.class,() -> evaluate(0)).status());

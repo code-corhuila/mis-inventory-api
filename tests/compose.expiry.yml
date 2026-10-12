@@ -1,0 +1,12 @@
+include:
+  - ./compose.events.yml
+  - ${MIS_GATEWAY_PATH:?MIS_GATEWAY_PATH required}/deploy/compose.yml
+services:
+  expiry-check:
+    build: {context: .., dockerfile: tests/Dockerfile.contracts}
+    entrypoint: [python, /checks/expiry_check.py]
+    volumes:
+      - ./expiry_check.py:/checks/expiry_check.py:ro
+      - ${EVT_CLIENT_PATH:?EVT_CLIENT_PATH required}:/credentials:ro
+    profiles: [test]
+    networks: [platform]
